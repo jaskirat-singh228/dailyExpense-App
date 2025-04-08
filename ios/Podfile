@@ -16,6 +16,9 @@ end
 
 target 'dailyExpense' do
   config = use_native_modules!
+     use_frameworks! :linkage => :static
+     pod 'Firebase/Firestore'
+     pod 'Firebase/Core'
 
   use_react_native!(
     :path => config[:reactNativePath],
