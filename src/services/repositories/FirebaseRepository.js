@@ -3,7 +3,7 @@ import { formatDateToDDMMYY } from '../../components/FormatedDate';
 
 const qtysCollection = firestore().collection('qtys');
 
-export const getQtysRealtime = (filteredQtys, filterDate = formatDateToDDMMYY(new Date())) => {
+export const getQtysRealtime = (filteredQtys, filterDate = new Date()) => {
     const query = qtysCollection.orderBy('date', 'asc');
 
     const unsubscribe = query.onSnapshot(snapshot => {
@@ -26,6 +26,22 @@ export const getQtysRealtime = (filteredQtys, filterDate = formatDateToDDMMYY(ne
 
     return unsubscribe;
 };
+
+export const getDefaultPrice = async (defaultPreice) => {
+    try {
+        const res = await firestore()
+            .collection('defaultPrice')
+            .doc('CDWcn51NZhr5oiv3yvER') // <- This seems to be a sub-document, double-check the path
+            .get();
+
+        if (res.exists) {
+            return defaultPreice(res.data().price);
+        }
+    } catch (error) {
+        console.log('Default price fetching error: ', error);
+
+    }
+}
 
 
 export const addQty = async (qty, date) => {

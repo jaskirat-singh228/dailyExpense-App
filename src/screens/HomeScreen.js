@@ -1,33 +1,38 @@
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Image, Modal, Platform, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { addQty, deleteQty, getQtysRealtime } from "../services/repositories/FirebaseRepository";
+import { ActivityIndicator, FlatList, Image, Modal, Platform, SafeAreaView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { addQty, deleteQty, getDefaultPrice, getQtysRealtime } from "../services/repositories/FirebaseRepository";
 import ActionSheet from "react-native-actions-sheet";
 import Header from "../components/Header";
 import { IMAGES } from "../utills/ImagePath";
-import DatePicker from "react-native-date-picker";
 import { formatDateToDDMMYY } from "../components/FormatedDate";
-import { generateExcelZipAndShare } from "../components/GenerateExcelFile";
+import MonthSelectorWithYear from "../components/MonthSelector";
+import ViewShot from "react-native-view-shot";
+import { generateExcelZipAndShare } from "../components/ShareExcelZIPFile";
+import RNFS from 'react-native-fs';
+import { sharePNG } from "../components/SharePNG";
 
 const HomeScreen = () => {
     const addQtyBottomSheetRef = useRef(null);
-    const calcuatorBottomSheetRef = useRef(null);
+    const calcuateBottomSheetRef = useRef(null);
+    const exportQtyBottomSheetRef = useRef(null);
+    const viewShotRef = useRef(null);
     const [qtys, setQtys] = useState([]);
+    const [defaultPrice, setDefaultPrice] = useState(0);
     const [loading, setLoading] = useState(false);
-    const [date, setDate] = useState(new Date());
-    const [openDatePicker, setOpenDatePicker] = useState(false);
+    const [selectedDate, setSelectedDate] = useState(new Date());
     const [selectedQty, setSelectedQty] = useState(1);
-    const [multiplyedBy, setMultiplyedBy] = useState(1);
-    const [newTotalQty, setNewTotalQty] = useState(0);
 
     useEffect(() => {
-        const unsubscribe = getQtysRealtime(setQtys, formatDateToDDMMYY(date));
+        const unsubscribe = getQtysRealtime(setQtys, formatDateToDDMMYY(selectedDate));
+        getDefaultPrice(setDefaultPrice);
+
         return () => unsubscribe();
-    }, [date]);
+    }, [selectedDate]);
 
     const handleAddQty = async () => {
         setLoading(true);
         try {
-            await addQty(selectedQty, formatDateToDDMMYY(date));
+            await addQty(selectedQty, formatDateToDDMMYY(selectedDate));
             setSelectedQty(1);
             addQtyBottomSheetRef.current?.hide();
             setLoading(false);
@@ -35,18 +40,6 @@ const HomeScreen = () => {
             console.log('Failed to add qty', error);
         }
     };
-
-    const handleDeleteQty = async (qtyId) => {
-        try {
-            await deleteQty(qtyId);
-        } catch (error) {
-            console.error('Failed to delete qty:', error);
-        }
-    };
-
-    const handleDatePicker = () => {
-        setOpenDatePicker(true);
-    }
 
     const handleIncreasing = () => {
         setSelectedQty(prev => prev + 0.5);
@@ -59,82 +52,129 @@ const HomeScreen = () => {
     }
 
     const handleCalulator = () => {
-        calcuatorBottomSheetRef.current?.show();
-    }
-
-    const handleModalCloseButton = () => {
-        calcuatorBottomSheetRef.current?.hide();
-        setMultiplyedBy(1);
-        setNewTotalQty(0);
+        calcuateBottomSheetRef.current?.show();
     }
 
     const handleExport = () => {
-        // let sample_data_to_export = [{ id: '1', name: 'Deepak Singh' }, { id: '2', name: 'Nikhil Rattan' }];
-        generateExcelZipAndShare(qtys, totalQty);
-        calcuatorBottomSheetRef.current?.hide();
-        setMultiplyedBy(1);
-        setNewTotalQty(0);
+        exportQtyBottomSheetRef.current?.show();
     }
+
+    const handleShareZIPFile = () => {
+        generateExcelZipAndShare(qtys, totalQty);
+    }
+
+    const handleShareOnWhatsApp = async () => {
+        sharePNG({ viewShotRef });
+        calcuateBottomSheetRef.current?.hide();
+    }
+
+    const [filterDay, filterMonth, filterYear] = formatDateToDDMMYY(selectedDate).split('-');
+    const fMonth = parseInt(filterMonth);
+    const fYear = parseInt(filterYear);
+
 
     const totalQty = qtys.reduce((total, item) => total + parseFloat(item.qty), 0);
 
     if (loading) return <View style={[styles.container, { alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.3)' }]}><ActivityIndicator /></View>
 
+    // const handleDeleteQty = async (qtyId) => {
+    //     try {
+    //         await deleteQty(qtyId);
+    //     } catch (error) {
+    //         console.error('Failed to delete qty:', error);
+    //     }
+    // };
+
     return (
         <SafeAreaView style={styles.container}>
             <Header title={'Home'} isButton={false} />
-            <TouchableOpacity style={[styles.calender, { right: 100 }]} onPress={handleCalulator}>
-                <Image source={IMAGES.calcuator} style={styles.calendarIcon} />
-                <Text style={{ fontSize: 12, color: '#ccc' }}>{'Calculate'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.calender} onPress={handleDatePicker}>
-                <Image source={IMAGES.calender} style={styles.calendarIcon} />
-                <Text style={{ fontSize: 12, color: '#ccc' }}>{formatDateToDDMMYY(date)}</Text>
-            </TouchableOpacity>
+            <View style={styles.headerIconsView}>
+                <TouchableOpacity style={[styles.calender, { right: 70 }]} onPress={handleCalulator}>
+                    <Image source={IMAGES.calcuator} style={styles.calendarIcon} />
+                    <Text style={{ fontSize: 12, color: '#ccc' }}>{'Calculate'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.calender} onPress={handleExport}>
+                    <Image source={IMAGES.export} style={[styles.calendarIcon, { width: 23 }]} />
+                    <Text style={{ fontSize: 12, color: '#ccc' }}>{'Export'}</Text>
+                </TouchableOpacity>
+            </View>
+
             <ActionSheet
-                id='calculator_bottomSheet'
-                ref={calcuatorBottomSheetRef}
-                containerStyle={styles.bottomSheet}
+                id='exportQty_bottomSheet'
+                ref={exportQtyBottomSheetRef}
+                containerStyle={[styles.bottomSheet, { justifyContent: 'center' }]}
                 onClose={() => {
-                    calcuatorBottomSheetRef.current?.hide();
-                    setMultiplyedBy(1);
-                    setNewTotalQty(0);
+                    exportQtyBottomSheetRef.current?.hide();
                 }}
             >
-                <Text style={[styles.addQtyText, { color: '#000000', fontSize: 20, alignSelf: 'center' }]}>Calculator</Text>
-                <TouchableOpacity onPress={handleExport} style={[styles.addQtyTextButton, { alignSelf: 'flex-end', backgroundColor: null, paddingHorizontal: 10, marginTop: 0, position: 'absolute', top: 0 }]}>
-                    <Image source={IMAGES.export} style={[styles.calender, { top: 0, height: 26, width: 26, tintColor: '#9f9f9f9f' }]} />
-                </TouchableOpacity>
-                <View style={[styles.itemView, { borderBottomWidth: 0, justifyContent: 'center', marginVertical: 30 }]}>
-                    <Text style={[styles.addQtyText, { color: '#000000', marginHorizontal: 0, fontSize: 18 }]}>{`Total qty: ${totalQty} x `}</Text>
-                    <TextInput
-                        value={multiplyedBy}
-                        placeholder="Multiply by"
-                        onChangeText={setMultiplyedBy}
-                        style={styles.input}
-                        keyboardType="numeric"
-                        maxLength={3}
-                    />
-                    <Text style={[styles.addQtyText, { alignSelf: 'center', color: '#000000', fontSize: 20, }]}>{`= ${newTotalQty}`}</Text>
-                </View>
-                <TouchableOpacity onPress={() => setNewTotalQty(!multiplyedBy ? totalQty : totalQty * multiplyedBy)} style={[styles.addQtyTextButton, { marginTop: 0 }]}>
-                    <Text style={[styles.addQtyText, { marginVertical: 10, alignSelf: 'center', }]}>{'Calculate'}</Text>
+                <TouchableOpacity onPress={handleShareZIPFile} style={[styles.addQtyTextButton, { marginTop: 0 }]}>
+                    <Text style={[styles.addQtyText, { marginVertical: 10, alignSelf: 'center', }]}>{'Share ZIP file'}</Text>
                 </TouchableOpacity>
             </ActionSheet>
-            <DatePicker
-                modal
-                mode="date"
-                open={openDatePicker}
-                date={date}
-                onConfirm={(date) => {
-                    setOpenDatePicker(false)
-                    setDate(date)
+
+            <ActionSheet
+                id='calculate_bottomSheet'
+                ref={calcuateBottomSheetRef}
+                containerStyle={[styles.bottomSheet, { paddingVertical: 0, padding: 0 }]}
+                onClose={() => {
+                    calcuateBottomSheetRef.current?.hide();
                 }}
-                onCancel={() => {
-                    setOpenDatePicker(false)
+            >
+                <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.9 }} style={styles.viewShorStyle}>
+                    <Text style={[styles.addQtyText, { color: '#000000', fontSize: 20, textAlign: 'center' }]}>
+                        {`${new Date(fYear, fMonth - 1).toLocaleString('default', { month: 'long' })}, ${fYear}`}
+                    </Text>
+                    <View style={[styles.itemView, { borderBottomWidth: 0, paddingHorizontal: 0, alignItems: null, marginTop: 20 }]}>
+                        <View>
+                            <Text style={[styles.addQtyText, { color: '#000000', marginHorizontal: 0, fontSize: 18 }]}>{`Total days: ${qtys.length}`}</Text>
+                            <FlatList
+                                data={qtys}
+                                keyExtractor={(item) => item.id}
+                                numColumns={10}
+                                renderItem={({ item }) => {
+                                    const [filterDay, filterMonth, filterYear] = item.date.split('-');
+                                    const frDay = parseInt(filterDay);
+
+                                    return <Text onPress={() => { }} style={[styles.qtyItemText, { marginRight: 0 }]}>{`${frDay}, `}</Text>
+                                }}
+                            />
+                        </View>
+                        <Text style={[styles.addQtyText, { color: '#000000', marginHorizontal: 0, fontSize: 18 }]}>{`Total qty: ${totalQty}`}</Text>
+                    </View>
+                    <View style={[styles.itemView, { borderBottomWidth: 0, paddingHorizontal: 0 }]}>
+                        <Text style={[styles.addQtyText, { color: '#000000', marginHorizontal: 0, fontSize: 18 }]}>{`Total price: ${totalQty * defaultPrice}(${defaultPrice})`}</Text>
+                        <TouchableOpacity onPress={handleShareOnWhatsApp}>
+                            <Image source={IMAGES.sharePNG} style={{ height: 50, width: 50 }} />
+                        </TouchableOpacity>
+                    </View>
+                </ViewShot>
+            </ActionSheet>
+
+
+            <ActionSheet
+                id='addQty_bottomSheet'
+                ref={addQtyBottomSheetRef}
+                containerStyle={styles.bottomSheet}>
+                <Text style={[styles.itemView, { borderBottomWidth: 0, fontSize: 20, alignSelf: 'center', fontWeight: 'bold' }]}>Add Details</Text>
+                <View style={[styles.itemView, { borderBottomWidth: 0, fontSize: 20, alignSelf: 'center' }]}>
+                    <Text onPress={handleDecreasing} style={[styles.qtyItemText, { fontSize: 50, backgroundColor: '#9f9f9f9f', padding: 10, lineHeight: 20 }]}>-</Text>
+                    <Text style={[styles.itemView, { borderBottomWidth: 0, fontSize: 20, alignSelf: 'center', marginHorizontal: 30 }]}>{selectedQty}</Text>
+                    <Text onPress={handleIncreasing} style={[styles.qtyItemText, { fontSize: 30, backgroundColor: '#9f9f9f9f', padding: 10, lineHeight: 20 }]}>+</Text>
+                </View>
+                <TouchableOpacity style={styles.addQtyTextButton} onPress={handleAddQty}>
+                    <Text style={[styles.addQtyText, { marginVertical: 10 }]}>Add qty</Text>
+                </TouchableOpacity>
+            </ActionSheet>
+
+            <MonthSelectorWithYear
+                selectedDate={selectedDate}
+                onMonthSelect={(monthDate) => {
+                    const firstDayOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+                    setSelectedDate(firstDayOfMonth);
                 }}
             />
-            <View style={[styles.container, { margin: 20, marginTop: Platform.OS === 'android' ? 90 : 60 }]}>
+
+            <View style={[styles.container, { margin: 20, marginTop: 0 }]}>
                 {qtys.length > 0 ? (<FlatList
                     data={qtys}
                     keyExtractor={(item) => item.id}
@@ -147,26 +187,12 @@ const HomeScreen = () => {
                         )
                     }}
                 />)
-                    : (<Text style={[styles.qtyItemText, { alignSelf: 'center' }]}>Add first qty</Text>)}
+                    : (<Text style={[styles.qtyItemText, { alignSelf: 'center' }]}>Add first qty of this month</Text>)}
                 <TouchableOpacity onPress={() => addQtyBottomSheetRef.current?.show()} style={styles.addQtyIconButton}>
-                    <Image source={require('../assets/add.png')} />
+                    <Image source={IMAGES.addQty} />
                 </TouchableOpacity>
-                <ActionSheet
-                    id='addQty_bottomSheet'
-                    ref={addQtyBottomSheetRef}
-                    containerStyle={styles.bottomSheet}>
-                    <Text style={[styles.itemView, { borderBottomWidth: 0, fontSize: 20, alignSelf: 'center', fontWeight: 'bold' }]}>Add Details</Text>
-                    <View style={[styles.itemView, { borderBottomWidth: 0, fontSize: 20, alignSelf: 'center' }]}>
-                        <Text onPress={handleDecreasing} style={[styles.qtyItemText, { fontSize: 50, backgroundColor: '#9f9f9f9f', padding: 10, lineHeight: 20 }]}>-</Text>
-                        <Text style={[styles.itemView, { borderBottomWidth: 0, fontSize: 20, alignSelf: 'center', marginHorizontal: 30 }]}>{selectedQty}</Text>
-                        <Text onPress={handleIncreasing} style={[styles.qtyItemText, { fontSize: 30, backgroundColor: '#9f9f9f9f', padding: 10, lineHeight: 20 }]}>+</Text>
-                    </View>
-                    <TouchableOpacity style={styles.addQtyTextButton} onPress={handleAddQty}>
-                        <Text style={[styles.addQtyText, { marginVertical: 10 }]}>Add qty</Text>
-                    </TouchableOpacity>
-                </ActionSheet>
             </View>
-        </SafeAreaView>
+        </SafeAreaView >
     );
 };
 
@@ -193,6 +219,7 @@ const styles = StyleSheet.create({
     },
     qtyItemText: {
         fontSize: 18,
+        color: '#000000'
     },
     addQtyTextButton: {
         alignSelf: 'center',
@@ -220,7 +247,7 @@ const styles = StyleSheet.create({
         height: '30%',
         position: 'absolute',
         zIndex: 1000,
-        padding: 10,
+        padding: 20,
         paddingVertical: 20
     },
     calendarIcon: {
@@ -231,22 +258,26 @@ const styles = StyleSheet.create({
     calender: {
         position: 'absolute',
         right: 20,
-        top: Platform.OS === 'android' ? 50 : 20,
         zIndex: 10000,
-        alignItems: 'center'
+        alignItems: 'center',
+        justifyContent: 'center'
     },
-    modalView: {
-        backgroundColor: '#ffffff',
-        width: '80%',
-        height: '40%',
-        borderRadius: 20,
-        padding: 20,
-        alignSelf: 'center',
+    headerIconsView: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: 'red',
         position: 'absolute',
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 2
-        },
+        top: Platform.OS === 'android' ? 65 : 20,
+        right: 0,
+        zIndex: 10000,
+    },
+    viewShorStyle: {
+        height: '100%',
+        width: '100%',
+        padding: 20,
+        backgroundColor: '#ffffff',
+        borderTopRightRadius: 10,
+        borderTopLeftRadius: 10
     }
 });

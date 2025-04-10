@@ -24,7 +24,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         zIndex: 10000,
         top: 0,
-        paddingHorizontal: 20
+        paddingHorizontal: 20,
     },
     backArrow: {
         tintColor: '#FFFFFF',

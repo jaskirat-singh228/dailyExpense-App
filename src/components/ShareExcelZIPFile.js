@@ -65,7 +65,6 @@ export const generateExcelZipAndShare = async (data, totalQty) => {
             title: 'Share ZIP File',
             url: `file://${zipResult}`,
             type: 'application/zip',
-            failOnCancel: false,
         });
 
     } catch (error) {
